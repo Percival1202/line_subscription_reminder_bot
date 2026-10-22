@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: line-subscription-reminder-bot
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: CHANNEL_SECRET
+        sync: false
+      - key: OWNER_USER_ID
+        sync: false
+      - key: TZ
+        value: Asia/Taipei
+      - key: REMIND_BEFORE_DAYS
+        value: "14"
+      - key: REMIND_HOUR
+        value: "9"
+      - key: REMIND_MINUTE
+        value: "0"

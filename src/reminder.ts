@@ -1,0 +1,71 @@
+import { Client } from "@line/bot-sdk";
+import { daysUntilDate } from "./date-utils";
+import { SubscriptionStore } from "./store";
+import { ReminderItem, Subscription } from "./types";
+
+export function collectReminderItems(
+  subscriptions: Subscription[],
+  remindBeforeDays: number
+): ReminderItem[] {
+  return subscriptions
+    .map((subscription) => ({
+      subscription,
+      daysUntil: daysUntilDate(subscription.expiryDate)
+    }))
+    .filter((item) => item.daysUntil === remindBeforeDays)
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+export function buildMentionMessage(items: ReminderItem[]): { text: string; mentionees: Array<Record<string, string>> } {
+  let text = "訂閱提醒：\n";
+  const mentionees: Array<Record<string, string>> = [];
+
+  for (const item of items) {
+    const name = item.subscription.userName || "用戶";
+    const mentionText = `@${name}`;
+    const line = `${mentionText} ${item.subscription.planName ? `[${item.subscription.planName}] ` : ""}距離下次繳費日還有 ${item.daysUntil} 天，請記得繳費。\n`;
+    const index = text.length;
+
+    text += line;
+    mentionees.push({
+      index: String(index),
+      length: String(mentionText.length),
+      userId: item.subscription.userId
+    });
+  }
+
+  text = text.trimEnd();
+  return { text, mentionees };
+}
+
+export async function sendReminderToGroup(
+  client: Client,
+  store: SubscriptionStore,
+  groupId: string,
+  remindBeforeDays: number,
+  forceSendNoData = false
+): Promise<number> {
+  const subscriptions = await store.listByGroup(groupId);
+  const items = collectReminderItems(subscriptions, remindBeforeDays);
+
+  if (items.length === 0 && !forceSendNoData) {
+    return 0;
+  }
+
+  if (items.length === 0) {
+    await client.pushMessage(groupId, {
+      type: "text",
+      text: `目前沒有「${remindBeforeDays} 天後需提醒」的訂閱。`
+    });
+    return 0;
+  }
+
+  const { text, mentionees } = buildMentionMessage(items);
+  await client.pushMessage(groupId, {
+    type: "text",
+    text,
+    mention: { mentionees }
+  } as any);
+
+  return items.length;
+}

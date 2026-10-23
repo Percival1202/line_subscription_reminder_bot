@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { middleware, Client, WebhookEvent, MessageEvent, TextEventMessage } from "@line/bot-sdk";
+import { middleware, Client, messagingApi, WebhookEvent, MessageEvent, TextEventMessage } from "@line/bot-sdk";
 import cron from "node-cron";
 import { config } from "./config";
 import { isValidDateText } from "./date-utils";
@@ -13,6 +13,7 @@ const lineConfig = {
 
 const app = express();
 const client = new Client(lineConfig);
+const reminderClient = new messagingApi.MessagingApiClient({ channelAccessToken: config.channelAccessToken });
 const store = new SubscriptionStore();
 
 interface MentionMessage {
@@ -314,7 +315,7 @@ async function handleList(replyToken: string, groupId: string): Promise<void> {
 }
 
 async function handleManualRemind(replyToken: string, groupId: string): Promise<void> {
-  const count = await sendReminderToGroup(client, store, groupId, config.remindBeforeDays, true);
+  const count = await sendReminderToGroup(reminderClient, store, groupId, config.remindBeforeDays);
   await client.replyMessage(replyToken, {
     type: "text",
     text: count > 0 ? `已送出提醒，共 ${count} 筆。` : `目前沒有「${config.remindBeforeDays} 天後需提醒」的訂閱。`
@@ -329,7 +330,7 @@ function scheduleDailyReminder(): void {
       try {
         const groupIds = config.defaultGroupId ? [config.defaultGroupId] : await store.listGroupIds();
         for (const groupId of groupIds) {
-          await sendReminderToGroup(client, store, groupId, config.remindBeforeDays);
+          await sendReminderToGroup(reminderClient, store, groupId, config.remindBeforeDays);
         }
       } catch (error) {
         console.error("Failed to send scheduled reminders:", error);

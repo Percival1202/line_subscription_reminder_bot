@@ -1,4 +1,4 @@
-import { Client } from "@line/bot-sdk";
+import { messagingApi } from "@line/bot-sdk";
 import { daysUntilDate } from "./date-utils";
 import { SubscriptionStore } from "./store";
 import { ReminderItem, Subscription } from "./types";
@@ -29,32 +29,27 @@ export function collectReminderItems(
 }
 
 export function buildMentionMessage(
-  items: Array<{ subscription: Subscription; daysUntil: number; mentionUserId: string; mentionName: string }>
-): { text: string; mentionees: Array<{ index: number; length: number; userId: string }> } {
+  items: ReminderItem[]
+): messagingApi.TextMessageV2 {
   let text = "訂閱提醒：\n";
-  const mentionees: Array<{ index: number; length: number; userId: string }> = [];
-  let cursor = text.length;
+  const substitution: NonNullable<messagingApi.TextMessageV2["substitution"]> = {};
 
-  for (const item of items) {
-    const mentionText = `@${item.mentionName || "用戶"}`;
-    const line = `${mentionText} ${item.subscription.planName ? `[${item.subscription.planName}] ` : ""}距離下次繳費日還有 ${item.daysUntil} 天，請記得繳費。\n`;
-
-    mentionees.push({
-      index: cursor,
-      length: mentionText.length,
-      userId: item.mentionUserId
-    });
-
-    text += line;
-    cursor = text.length;
+  for (const [index, item] of items.entries()) {
+    const key = `user${index}`;
+    // textV2 reserves braces for substitutions; escape literal user-entered text.
+    const planName = item.subscription.planName?.replace(/[{}]/g, (brace) => brace + brace);
+    text += `{${key}} ${planName ? `[${planName}] ` : ""}距離下次繳費日還有 ${item.daysUntil} 天，請記得繳費。\n`;
+    substitution[key] = {
+      type: "mention",
+      mentionee: { type: "user", userId: item.subscription.userId }
+    };
   }
 
-  text = text.trimEnd();
-  return { text, mentionees };
+  return { type: "textV2", text: text.trimEnd(), substitution };
 }
 
 export async function sendReminderToGroup(
-  client: Client,
+  client: Pick<messagingApi.MessagingApiClient, "pushMessage">,
   store: SubscriptionStore,
   groupId: string,
   remindBeforeDays: number,
@@ -68,44 +63,23 @@ export async function sendReminderToGroup(
   }
 
   if (items.length === 0) {
-    await client.pushMessage(groupId, {
-      type: "text",
-      text: `目前沒有「${remindBeforeDays} 天後需提醒」的訂閱。`
+    await client.pushMessage({
+      to: groupId,
+      messages: [{
+        type: "text",
+        text: `目前沒有「${remindBeforeDays} 天後需提醒」的訂閱。`
+      }]
     });
     return 0;
   }
 
-  const enrichedItems = await Promise.all(
-    items.map(async (item) => {
-      try {
-        const profile = await client.getGroupMemberProfile(groupId, item.subscription.userId);
-        return {
-          ...item,
-          mentionUserId: profile.userId || item.subscription.userId,
-          mentionName: profile.displayName || item.subscription.userName
-        };
-      } catch (error) {
-        console.warn("Failed to fetch group member profile for reminder mention:", {
-          groupId,
-          userId: item.subscription.userId,
-          error
-        });
-
-        return {
-          ...item,
-          mentionUserId: item.subscription.userId,
-          mentionName: item.subscription.userName || "用戶"
-        };
-      }
-    })
-  );
-
-  const { text, mentionees } = buildMentionMessage(enrichedItems);
-  await client.pushMessage(groupId, {
-    type: "text",
-    text,
-    mention: { mentionees }
-  } as any);
+  // LINE permits at most 20 mentions in one textV2 message.
+  for (let offset = 0; offset < items.length; offset += 20) {
+    await client.pushMessage({
+      to: groupId,
+      messages: [buildMentionMessage(items.slice(offset, offset + 20))]
+    });
+  }
 
   return items.length;
 }

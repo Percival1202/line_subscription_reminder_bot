@@ -12,8 +12,26 @@ export function isValidDateText(input: string): boolean {
   return date.getFullYear() === y && date.getMonth() + 1 === m && date.getDate() === d;
 }
 
-export function daysUntilDate(input: string, now = new Date()): number {
-  const target = new Date(`${input}T00:00:00`);
+export function daysUntilDate(input: string | Date, now = new Date()): number {
+  const parsed = input instanceof Date ? input : new Date(input);
+
+  if (Number.isNaN(parsed.getTime())) {
+    if (typeof input === "string") {
+      const normalized = input.includes("T") ? input.slice(0, 10) : input;
+      const fallback = new Date(`${normalized}T00:00:00`);
+      if (Number.isNaN(fallback.getTime())) {
+        return NaN;
+      }
+
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const diff = fallback.getTime() - today.getTime();
+      return Math.floor(diff / 86400000);
+    }
+
+    return NaN;
+  }
+
+  const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diff = target.getTime() - today.getTime();
   return Math.floor(diff / 86400000);

@@ -79,11 +79,25 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
 
   const isOwner = userId === config.ownerUserId;
 
-  if (!isOwner && command !== "!my" && command !== "/my" && command !== "!help" && command !== "/help") {
+  const readableCommands = ["!my", "/my", "!help", "/help", "!list", "/list"];
+  if (!isOwner && !readableCommands.includes(command ?? "")) {
     await client.replyMessage(messageEvent.replyToken, {
       type: "text",
-      text: "你目前僅可使用 !my 查詢自己的下次繳費日。"
+      text: "你目前僅可使用 !my、!help 或 !list。"
     });
+    return;
+  }
+
+  if (command === "!unsub" || command === "/unsub") {
+    if (!isOwner) {
+      await client.replyMessage(messageEvent.replyToken, {
+        type: "text",
+        text: "你目前無法使用 !unsub；僅管理者可刪除紀錄。"
+      });
+      return;
+    }
+
+    await handleRemoveSubscription(messageEvent, groupId, userId, text);
     return;
   }
 
@@ -95,10 +109,6 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
     case "!set":
     case "/set":
       await handleSetSubscriptionForMention(messageEvent, groupId, text);
-      return;
-    case "!unsub":
-    case "/unsub":
-      await handleRemoveSubscription(messageEvent, groupId, userId, text);
       return;
     case "!list":
     case "/list":
@@ -124,7 +134,7 @@ async function replyHelp(replyToken: string): Promise<void> {
       "可用指令：",
       "!sub YYYY-MM-DD [方案名稱]  設定自己的下次繳費日",
       "!set @某人 YYYY-MM-DD [方案名稱]  設定指定成員的下次繳費日",
-      "!unsub [@某人]  刪除自己的紀錄；管理者可刪除他人紀錄",
+      "!unsub @某人  僅管理者可刪除指定成員紀錄",
       "!list  查看本群組訂閱清單",
       `!remind  立即檢查並提醒「${config.remindBeforeDays} 天後要繳費」的人`,
       "!my  查詢自己的下次繳費日",

@@ -28,20 +28,21 @@ export function collectReminderItems(
   return matched;
 }
 
-export function buildMentionMessage(items: ReminderItem[]): { text: string; mentionees: Array<{ index: number; length: number; userId: string }> } {
+export function buildMentionMessage(
+  items: Array<{ subscription: Subscription; daysUntil: number; mentionUserId: string; mentionName: string }>
+): { text: string; mentionees: Array<{ index: number; length: number; userId: string }> } {
   let text = "訂閱提醒：\n";
   const mentionees: Array<{ index: number; length: number; userId: string }> = [];
   let cursor = text.length;
 
   for (const item of items) {
-    const name = item.subscription.userName || "用戶";
-    const mentionText = `@${name}`;
+    const mentionText = `@${item.mentionName || "用戶"}`;
     const line = `${mentionText} ${item.subscription.planName ? `[${item.subscription.planName}] ` : ""}距離下次繳費日還有 ${item.daysUntil} 天，請記得繳費。\n`;
 
     mentionees.push({
       index: cursor,
       length: mentionText.length,
-      userId: item.subscription.userId
+      userId: item.mentionUserId
     });
 
     text += line;
@@ -74,7 +75,32 @@ export async function sendReminderToGroup(
     return 0;
   }
 
-  const { text, mentionees } = buildMentionMessage(items);
+  const enrichedItems = await Promise.all(
+    items.map(async (item) => {
+      try {
+        const profile = await client.getGroupMemberProfile(groupId, item.subscription.userId);
+        return {
+          ...item,
+          mentionUserId: profile.userId || item.subscription.userId,
+          mentionName: profile.displayName || item.subscription.userName
+        };
+      } catch (error) {
+        console.warn("Failed to fetch group member profile for reminder mention:", {
+          groupId,
+          userId: item.subscription.userId,
+          error
+        });
+
+        return {
+          ...item,
+          mentionUserId: item.subscription.userId,
+          mentionName: item.subscription.userName || "用戶"
+        };
+      }
+    })
+  );
+
+  const { text, mentionees } = buildMentionMessage(enrichedItems);
   await client.pushMessage(groupId, {
     type: "text",
     text,

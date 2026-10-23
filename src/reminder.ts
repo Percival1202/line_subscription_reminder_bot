@@ -7,13 +7,25 @@ export function collectReminderItems(
   subscriptions: Subscription[],
   remindBeforeDays: number
 ): ReminderItem[] {
-  return subscriptions
+  const items = subscriptions
     .map((subscription) => ({
       subscription,
       daysUntil: daysUntilDate(subscription.expiryDate)
     }))
-    .filter((item) => item.daysUntil === remindBeforeDays)
     .sort((a, b) => a.daysUntil - b.daysUntil);
+
+  const matched = items.filter((item) => item.daysUntil === remindBeforeDays);
+
+  for (const item of items) {
+    console.log("Reminder debug:", {
+      userName: item.subscription.userName,
+      expiryDate: item.subscription.expiryDate,
+      daysUntil: item.daysUntil,
+      remindBeforeDays
+    });
+  }
+
+  return matched;
 }
 
 export function buildMentionMessage(items: ReminderItem[]): { text: string; mentionees: Array<Record<string, string>> } {

@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import { middleware, Client, messagingApi, WebhookEvent, MessageEvent, TextEventMessage } from "@line/bot-sdk";
 import cron from "node-cron";
 import { config } from "./config";
-import { isValidDateText } from "./date-utils";
+import { isValidDateText, formatDisplayDate } from "./date-utils";
 import { sendReminderToGroup } from "./reminder";
 import { SubscriptionStore } from "./store";
 
@@ -156,7 +156,7 @@ async function handleMySubscription(replyToken: string, groupId: string, userId:
 
   await client.replyMessage(replyToken, {
     type: "text",
-    text: `你的下次繳費日：${subscription.expiryDate}${subscription.planName ? `（${subscription.planName}）` : ""}`
+    text: `你的下次繳費日：${formatDisplayDate(subscription.expiryDate)}${subscription.planName ? `（${subscription.planName}）` : ""}`
   });
 }
 
@@ -197,7 +197,7 @@ async function handleSetSubscription(
 
   await client.replyMessage(event.replyToken, {
     type: "text",
-    text: `已設定 ${saved.userName} 的下次繳費日為 ${saved.expiryDate}${saved.planName ? `（${saved.planName}）` : ""}`
+    text: `已設定 ${saved.userName} 的下次繳費日為 ${formatDisplayDate(saved.expiryDate)}${saved.planName ? `（${saved.planName}）` : ""}`
   });
 }
 
@@ -254,7 +254,7 @@ async function handleSetSubscriptionForMention(event: MessageEvent, groupId: str
 
   await client.replyMessage(event.replyToken, {
     type: "text",
-    text: `已設定 ${saved.userName} 的下次繳費日為 ${saved.expiryDate}${saved.planName ? `（${saved.planName}）` : ""}`
+    text: `已設定 ${saved.userName} 的下次繳費日為 ${formatDisplayDate(saved.expiryDate)}${saved.planName ? `（${saved.planName}）` : ""}`
   });
 }
 
@@ -305,7 +305,7 @@ async function handleList(replyToken: string, groupId: string): Promise<void> {
   }
 
   const lines = list.map(
-    (item, index) => `${index + 1}. ${item.userName} - ${item.expiryDate}${item.planName ? ` (${item.planName})` : ""}`
+    (item, index) => `${index + 1}. ${item.userName} - ${formatDisplayDate(item.expiryDate)}${item.planName ? ` (${item.planName})` : ""}`
   );
 
   await client.replyMessage(replyToken, {

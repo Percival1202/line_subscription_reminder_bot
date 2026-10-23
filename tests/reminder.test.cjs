@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildMentionMessage, sendReminderToGroup } = require('../dist/reminder');
+const { formatDisplayDate } = require('../dist/date-utils');
 
 function item(index, planName = 'Netflix') {
   return {
@@ -12,6 +13,12 @@ function item(index, planName = 'Netflix') {
     daysUntil: 14
   };
 }
+
+test('formats user-facing dates as YYYY/MM/DD while keeping stored ISO dates', () => {
+  assert.equal(formatDisplayDate('2026-11-06'), '2026/11/06');
+  assert.equal(formatDisplayDate(new Date('2026-11-06T00:00:00Z')), '2026/11/06');
+  assert.equal(formatDisplayDate('invalid-date'), 'invalid-date');
+});
 
 test('builds official textV2 user mentions instead of inbound mention metadata', () => {
   const items = [item(1), item(2)];

@@ -37,6 +37,27 @@ export function daysUntilDate(input: string | Date, now = new Date()): number {
   return Math.floor(diff / 86400000);
 }
 
+export function formatDisplayDate(input: string | Date | undefined): string {
+  if (!input) {
+    return "";
+  }
+
+  const raw = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(raw.getTime())) {
+    const text = String(input).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return text.replace(/-/g, "/");
+    }
+
+    return text;
+  }
+
+  const year = raw.getFullYear();
+  const month = String(raw.getMonth() + 1).padStart(2, "0");
+  const day = String(raw.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
 export function formatDaysLabel(daysUntil: number): string {
   if (daysUntil > 0) {
     return `${daysUntil} 天後到期`;

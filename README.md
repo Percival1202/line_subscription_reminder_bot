@@ -68,7 +68,7 @@ Webhook 路徑：
 
 並啟用 Use webhook。
 
-## 4-1. 用 Render 免費部署（最省事）
+## 4-1. 用 Render + Supabase 正式上線（推薦）
 
 1. 把此專案推到 GitHub。
 2. 到 Render 建立帳號後，選擇 **New +** -> **Web Service**。
@@ -77,27 +77,43 @@ Webhook 路徑：
    - Runtime：Node
    - Build Command：`npm install && npm run build`
    - Start Command：`npm start`
-   - Plan：Free
+   - Plan：Free（測試）或付費（正式運作）
 5. 在 Render 的 Environment 變數頁面設定：
    - `CHANNEL_ACCESS_TOKEN`（必填）
    - `CHANNEL_SECRET`（必填）
    - `OWNER_USER_ID`（必填）
+   - `DATABASE_URL`（必填，從 Supabase 取得）
    - `TZ=Asia/Taipei`（建議）
    - `REMIND_BEFORE_DAYS=14`（可選）
    - `REMIND_HOUR=9`（可選）
    - `REMIND_MINUTE=0`（可選）
-6. 部署完成後會拿到網址，例如：
+6. 在 Supabase 建立一張 `subscriptions` 表：
+
+```sql
+create table if not exists subscriptions (
+  group_id text not null,
+  user_id text not null,
+  user_name text not null,
+  expiry_date date not null,
+  plan_name text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (group_id, user_id)
+);
+```
+
+7. 部署完成後會拿到網址，例如：
    - `https://your-service-name.onrender.com`
-7. 在 LINE Developers 的 Webhook URL 填入：
+8. 在 LINE Developers 的 Webhook URL 填入：
    - `https://your-service-name.onrender.com/webhook`
-8. 到以下網址確認服務正常：
+9. 到以下網址確認服務正常：
    - `https://your-service-name.onrender.com/health`
 
 注意事項：
 
-- Render Free 方案可能有冷啟動時間，剛被喚醒時 Webhook 回應可能較慢。
-- 目前專案把資料寫在 `data/subscriptions.json`，雲端環境通常是暫存檔案系統，重啟或重新部署後資料可能遺失。
-- 建議正式上線時改用外部資料庫（例如 PostgreSQL）。
+- 本機版本會直接讀寫 `data/subscriptions.json`，適合測試；正式上線請使用 Supabase / PostgreSQL。
+- Render Free 方案有冷啟動時間，剛被喚醒時 Webhook 回應可能較慢。
+- 若要常駐正式運作，建議使用付費方案或較穩定的雲端資料庫方案。
 
 ## 5. 群組指令
 

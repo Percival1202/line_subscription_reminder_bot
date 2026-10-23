@@ -1,113 +1,94 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { Pool } from "pg";
 import { Subscription } from "./types";
 
-interface DataFile {
-  subscriptions: Subscription[];
-}
-
-const EMPTY_DATA: DataFile = { subscriptions: [] };
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
 export class SubscriptionStore {
-  private readonly filePath: string;
-
-  constructor(filePath?: string) {
-    this.filePath = filePath ?? path.resolve(process.cwd(), "data", "subscriptions.json");
-  }
-
-  private async ensureFile(): Promise<void> {
-    const folder = path.dirname(this.filePath);
-    await fs.mkdir(folder, { recursive: true });
-
-    try {
-      await fs.access(this.filePath);
-    } catch {
-      await fs.writeFile(this.filePath, JSON.stringify(EMPTY_DATA, null, 2), "utf8");
-    }
-  }
-
-  private async readData(): Promise<DataFile> {
-    await this.ensureFile();
-    const raw = await fs.readFile(this.filePath, "utf8");
-    try {
-      const data = JSON.parse(raw) as DataFile;
-      if (!Array.isArray(data.subscriptions)) {
-        return EMPTY_DATA;
-      }
-      return data;
-    } catch {
-      return EMPTY_DATA;
-    }
-  }
-
-  private async writeData(data: DataFile): Promise<void> {
-    await this.ensureFile();
-    await fs.writeFile(this.filePath, JSON.stringify(data, null, 2), "utf8");
-  }
-
   async upsert(input: Omit<Subscription, "createdAt" | "updatedAt">): Promise<Subscription> {
-    const data = await this.readData();
     const now = new Date().toISOString();
 
-    const index = data.subscriptions.findIndex(
-      (item) => item.groupId === input.groupId && item.userId === input.userId
-    );
+    const sql = `
+      insert into subscriptions (group_id, user_id, user_name, expiry_date, plan_name, created_at, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $6)
+      on conflict (group_id, user_id)
+      do update set
+        user_name = excluded.user_name,
+        expiry_date = excluded.expiry_date,
+        plan_name = excluded.plan_name,
+        updated_at = excluded.updated_at
+      returning *
+    `;
 
-    if (index >= 0) {
-      const updated: Subscription = {
-        ...data.subscriptions[index],
-        ...input,
-        updatedAt: now
-      };
-      data.subscriptions[index] = updated;
-      await this.writeData(data);
-      return updated;
-    }
+    const result = await pool.query(sql, [
+      input.groupId,
+      input.userId,
+      input.userName,
+      input.expiryDate,
+      input.planName ?? null,
+      now
+    ]);
 
-    const created: Subscription = {
-      ...input,
-      createdAt: now,
-      updatedAt: now
+    const row = result.rows[0];
+    return {
+      groupId: row.group_id,
+      userId: row.user_id,
+      userName: row.user_name,
+      expiryDate: row.expiry_date,
+      planName: row.plan_name ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
-
-    data.subscriptions.push(created);
-    await this.writeData(data);
-    return created;
   }
 
   async remove(groupId: string, userId: string): Promise<boolean> {
-    const data = await this.readData();
-    const before = data.subscriptions.length;
-    data.subscriptions = data.subscriptions.filter(
-      (item) => !(item.groupId === groupId && item.userId === userId)
+    const result = await pool.query(
+      "delete from subscriptions where group_id = $1 and user_id = $2 returning *",
+      [groupId, userId]
     );
-
-    if (data.subscriptions.length === before) {
-      return false;
-    }
-
-    await this.writeData(data);
-    return true;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async listByGroup(groupId: string): Promise<Subscription[]> {
-    const data = await this.readData();
-    return data.subscriptions.filter((item) => item.groupId === groupId);
+    const result = await pool.query(
+      "select * from subscriptions where group_id = $1 order by expiry_date asc",
+      [groupId]
+    );
+
+    return result.rows.map((row) => ({
+      groupId: row.group_id,
+      userId: row.user_id,
+      userName: row.user_name,
+      expiryDate: row.expiry_date,
+      planName: row.plan_name ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
   }
 
   async getByGroupAndUser(groupId: string, userId: string): Promise<Subscription | undefined> {
-    const data = await this.readData();
-    return data.subscriptions.find((item) => item.groupId === groupId && item.userId === userId);
+    const result = await pool.query(
+      "select * from subscriptions where group_id = $1 and user_id = $2",
+      [groupId, userId]
+    );
+
+    if (result.rowCount === 0) return undefined;
+
+    const row = result.rows[0];
+    return {
+      groupId: row.group_id,
+      userId: row.user_id,
+      userName: row.user_name,
+      expiryDate: row.expiry_date,
+      planName: row.plan_name ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
   }
 
   async listGroupIds(): Promise<string[]> {
-    const data = await this.readData();
-    const ids = new Set<string>();
-
-    for (const item of data.subscriptions) {
-      ids.add(item.groupId);
-    }
-
-    return Array.from(ids);
+    const result = await pool.query("select distinct group_id from subscriptions");
+    return result.rows.map((row) => row.group_id);
   }
 }

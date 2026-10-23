@@ -1,3 +1,22 @@
 {
-  "subscriptions": []
+  "subscriptions": [
+    {
+      "groupId": "C06b19c8ae9cd9efb2ba1246dd2ecfdcf",
+      "userId": "U4c52ddc076c06ffff9cddedd41b103fa",
+      "userName": "黃平賢👞Percival",
+      "expiryDate": "2026-11-06",
+      "planName": "Netflix",
+      "createdAt": "2026-10-23T07:03:24.823Z",
+      "updatedAt": "2026-10-23T07:07:39.736Z"
+    },
+    {
+      "groupId": "C06b19c8ae9cd9efb2ba1246dd2ecfdcf",
+      "userId": "U2a168dcfb00b36932161537996997222",
+      "userName": "詠慧",
+      "expiryDate": "2026-11-02",
+      "planName": "Netflix",
+      "createdAt": "2026-10-23T07:04:09.677Z",
+      "updatedAt": "2026-10-23T07:04:09.677Z"
+    }
+  ]
 }

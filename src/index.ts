@@ -53,7 +53,16 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
   const groupId = messageEvent.source.type === "group" ? messageEvent.source.groupId : undefined;
   const userId = messageEvent.source.userId;
 
+  console.log("LINE message source:", messageEvent.source);
+  console.log("Detected userId:", userId);
+  console.log("Detected groupId:", groupId);
+
   const command = text.split(/\s+/)[0]?.toLowerCase();
+  const isCommandMessage = text.startsWith("!") || text.startsWith("/");
+
+  if (!isCommandMessage) {
+    return;
+  }
 
   if (text === "!help" || text === "/help") {
     await replyHelp(messageEvent.replyToken);
@@ -89,7 +98,7 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
       return;
     case "!unsub":
     case "/unsub":
-      await handleRemoveSubscription(messageEvent, groupId, userId);
+      await handleRemoveSubscription(messageEvent, groupId, userId, text);
       return;
     case "!list":
     case "/list":
@@ -115,7 +124,7 @@ async function replyHelp(replyToken: string): Promise<void> {
       "可用指令：",
       "!sub YYYY-MM-DD [方案名稱]  設定自己的下次繳費日",
       "!set @某人 YYYY-MM-DD [方案名稱]  設定指定成員的下次繳費日",
-      "!unsub  刪除自己的紀錄",
+      "!unsub [@某人]  刪除自己的紀錄；管理者可刪除他人紀錄",
       "!list  查看本群組訂閱清單",
       `!remind  立即檢查並提醒「${config.remindBeforeDays} 天後要繳費」的人`,
       "!my  查詢自己的下次繳費日",
@@ -238,8 +247,36 @@ async function handleSetSubscriptionForMention(event: MessageEvent, groupId: str
   });
 }
 
-async function handleRemoveSubscription(event: MessageEvent, groupId: string, userId: string): Promise<void> {
-  const removed = await store.remove(groupId, userId);
+async function handleRemoveSubscription(event: MessageEvent, groupId: string, userId: string, text: string): Promise<void> {
+  const isOwner = userId === config.ownerUserId;
+  const targetUserId = getFirstMentionedUserId(event);
+
+  if (targetUserId && !isOwner) {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: "只有管理者才能刪除他人的訂閱紀錄。"
+    });
+    return;
+  }
+
+  const effectiveUserId = targetUserId ?? userId;
+  const targetProfile = targetUserId ? await client.getGroupMemberProfile(groupId, targetUserId).catch(() => undefined) : undefined;
+  const removed = await store.remove(groupId, effectiveUserId);
+
+  if (targetUserId && isOwner) {
+    await client.replyMessage(event.replyToken, {
+      type: "text",
+      text: removed
+        ? `已移除 ${targetProfile?.displayName ?? "該成員"} 的訂閱提醒資料。`
+        : "找不到該成員的訂閱資料。"
+    });
+    return;
+  }
+
+  if (!text.trim().startsWith("!unsub") && !text.trim().startsWith("/unsub")) {
+    return;
+  }
+
   await client.replyMessage(event.replyToken, {
     type: "text",
     text: removed ? "已移除你的訂閱提醒資料。" : "找不到你的訂閱資料。"

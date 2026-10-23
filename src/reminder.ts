@@ -28,22 +28,24 @@ export function collectReminderItems(
   return matched;
 }
 
-export function buildMentionMessage(items: ReminderItem[]): { text: string; mentionees: Array<Record<string, string>> } {
+export function buildMentionMessage(items: ReminderItem[]): { text: string; mentionees: Array<{ index: number; length: number; userId: string }> } {
   let text = "訂閱提醒：\n";
-  const mentionees: Array<Record<string, string>> = [];
+  const mentionees: Array<{ index: number; length: number; userId: string }> = [];
+  let cursor = text.length;
 
   for (const item of items) {
     const name = item.subscription.userName || "用戶";
     const mentionText = `@${name}`;
     const line = `${mentionText} ${item.subscription.planName ? `[${item.subscription.planName}] ` : ""}距離下次繳費日還有 ${item.daysUntil} 天，請記得繳費。\n`;
-    const index = text.length;
 
-    text += line;
     mentionees.push({
-      index: String(index),
-      length: String(mentionText.length),
+      index: cursor,
+      length: mentionText.length,
       userId: item.subscription.userId
     });
+
+    text += line;
+    cursor = text.length;
   }
 
   text = text.trimEnd();
